@@ -449,7 +449,7 @@ int8_t WizFi360::rssi()
     return rssi;
 }
 
-int WIZFI360::scan(WiFiAccessPoint *res, unsigned limit, scan_mode mode, unsigned t_max, unsigned t_min)
+int WizFi360::scan(WiFiAccessPoint *res, unsigned limit, scan_mode mode, unsigned t_max, unsigned t_min)
 {
     _smutex.lock();
 
@@ -685,7 +685,7 @@ void WizFi360::_oob_packet_hdlr()
     pdu_len = sizeof(struct packet) + amount;
 
     if ((_heap_usage + pdu_len) > MBED_CONF_WIZFI360_SOCKET_BUFSIZE) {
-        tr_debug("\"WIZFI360.socket-bufsize\"-limit exceeded, packet dropped");
+        tr_debug("\"WizFi360.socket-bufsize\"-limit exceeded, packet dropped");
         return;
     }
 
@@ -1091,7 +1091,7 @@ void WIZFI360::_oob_scan_results()
     }
 }
 
-void WIZFI360::_oob_connect_err()
+void WizFi360::_oob_connect_err()
 {
     _fail = false;
     _connect_error = 0;
@@ -1230,7 +1230,7 @@ nsapi_connection_status_t WizFi360::connection_status() const
     return _conn_status;
 }
 
-bool WIZFI360::set_country_code_policy(bool track_ap, const char *country_code, int channel_start, int channels)
+bool WizFi360::set_country_code_policy(bool track_ap, const char *country_code, int channel_start, int channels)
 {
     if (!(FW_AT_LEAST_VERSION(_at_v.major, _at_v.minor, _at_v.patch, 0, WIZFI360_AT_VERSION_WIFI_SCAN_CHANGE))) {
         return true;
