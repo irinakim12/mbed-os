@@ -1,4 +1,6 @@
-/* ESP8266 Example
+/* This WizFi360 Driver referred to WIZFI360 Driver in mbed-os
+ *
+ * WIZFI360 Example
  * Copyright (c) 2015 ARM Limited
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -23,7 +25,7 @@
 #include <string.h>
 #include <stdlib.h>
 
-#include "ESP8266.h"
+#include "WizFi360.h"
 #include "features/netsocket/nsapi_types.h"
 #include "mbed_trace.h"
 #include "PinNames.h"
@@ -31,19 +33,19 @@
 #include "platform/mbed_error.h"
 #include "rtos/Kernel.h"
 
-#define TRACE_GROUP  "ESPA" // ESP8266 AT layer
+#define TRACE_GROUP  "WIZFIA" // WizFi360 AT layer
 
-#define ESP8266_DEFAULT_BAUD_RATE   115200
-#define ESP8266_ALL_SOCKET_IDS      -1
+#define WIZFI360_DEFAULT_BAUD_RATE   115200
+#define WIZFI360_ALL_SOCKET_IDS      -1
 
 using namespace mbed;
 
-ESP8266::ESP8266(PinName tx, PinName rx, bool debug, PinName rts, PinName cts)
+WizFi360::WizFi360(PinName tx, PinName rx, bool debug, PinName rts, PinName cts)
     : _sdk_v(-1, -1, -1),
       _at_v(-1, -1, -1),
       _tcp_passive(false),
       _callback(0),
-      _serial(tx, rx, ESP8266_DEFAULT_BAUD_RATE),
+      _serial(tx, rx, WIZFI360_DEFAULT_BAUD_RATE),
       _serial_rts(rts),
       _serial_cts(cts),
       _parser(&_serial),
@@ -60,35 +62,32 @@ ESP8266::ESP8266(PinName tx, PinName rx, bool debug, PinName rts, PinName cts)
       _reset_done(false),
       _conn_status(NSAPI_STATUS_DISCONNECTED)
 {
-    _serial.set_baud(ESP8266_DEFAULT_BAUD_RATE);
+    _serial.set_baud(WIZFI360_DEFAULT_BAUD_RATE);
     _parser.debug_on(debug);
     _parser.set_delimiter("\r\n");
-    _parser.oob("+IPD", callback(this, &ESP8266::_oob_packet_hdlr));
-    //Note: espressif at command document says that this should be +CWJAP_CUR:<error code>
-    //but seems that at least current version is not sending it
-    //https://www.espressif.com/sites/default/files/documentation/4a-esp8266_at_instruction_set_en.pdf
+    _parser.oob("+IPD", callback(this, &WizFi360::_oob_packet_hdlr));
+
     //Also seems that ERROR is not sent, but FAIL instead
-    _parser.oob("0,CLOSED", callback(this, &ESP8266::_oob_socket0_closed));
-    _parser.oob("1,CLOSED", callback(this, &ESP8266::_oob_socket1_closed));
-    _parser.oob("2,CLOSED", callback(this, &ESP8266::_oob_socket2_closed));
-    _parser.oob("3,CLOSED", callback(this, &ESP8266::_oob_socket3_closed));
-    _parser.oob("4,CLOSED", callback(this, &ESP8266::_oob_socket4_closed));
-    _parser.oob("+CWJAP:", callback(this, &ESP8266::_oob_connect_err));
-    _parser.oob("WIFI ", callback(this, &ESP8266::_oob_connection_status));
-    _parser.oob("UNLINK", callback(this, &ESP8266::_oob_socket_close_err));
-    _parser.oob("ALREADY CONNECTED", callback(this, &ESP8266::_oob_conn_already));
-    _parser.oob("ERROR", callback(this, &ESP8266::_oob_err));
-    _parser.oob("ready", callback(this, &ESP8266::_oob_ready));
-    _parser.oob("+CWLAP:", callback(this, &ESP8266::_oob_scan_results));
+    _parser.oob("0,CLOSED", callback(this, &WizFi360::_oob_socket0_closed));
+    _parser.oob("1,CLOSED", callback(this, &WizFi360::_oob_socket1_closed));
+    _parser.oob("2,CLOSED", callback(this, &WizFi360::_oob_socket2_closed));
+    _parser.oob("3,CLOSED", callback(this, &WizFi360::_oob_socket3_closed));
+    _parser.oob("4,CLOSED", callback(this, &WizFi360::_oob_socket4_closed));
+    _parser.oob("+CWJAP:", callback(this, &WizFi360::_oob_connect_err));
+    _parser.oob("WIFI ", callback(this, &WizFi360::_oob_connection_status));
+    _parser.oob("UNLINK", callback(this, &WizFi360::_oob_socket_close_err));
+    _parser.oob("ALREADY CONNECTED", callback(this, &WizFi360::_oob_conn_already));
+    _parser.oob("ERROR", callback(this, &WizFi360::_oob_err));
+    _parser.oob("ready", callback(this, &WizFi360::_oob_ready));
+    _parser.oob("+CWLAP:", callback(this, &WizFi360::_oob_scan_results));
     // Don't expect to find anything about the watchdog reset in official documentation
-    //https://techtutorialsx.com/2017/01/21/esp8266-watchdog-functions/
-    _parser.oob("wdt reset", callback(this, &ESP8266::_oob_watchdog_reset));
+    //https://techtutorialsx.com/2017/01/21/WIZFI360 watchdog-functions/
+    _parser.oob("wdt reset", callback(this, &WizFi360::_oob_watchdog_reset));
     // Don't see a reason to make distiction between software(Software WDT reset) and hardware(wdt reset) watchdog treatment
-    //https://github.com/esp8266/Arduino/blob/4897e0006b5b0123a2fa31f67b14a3fff65ce561/doc/faq/a02-my-esp-crashes.md#watchdog
-    _parser.oob("Soft WDT reset", callback(this, &ESP8266::_oob_watchdog_reset));
-    _parser.oob("busy ", callback(this, &ESP8266::_oob_busy));
+    _parser.oob("Soft WDT reset", callback(this, &WizFi360::_oob_watchdog_reset));
+    _parser.oob("busy ", callback(this, &WizFi360::_oob_busy));
     // NOTE: documentation v3.0 says '+CIPRECVDATA:<data_len>,' but it's not how the FW responds...
-    _parser.oob("+CIPRECVDATA,", callback(this, &ESP8266::_oob_tcp_data_hdlr));
+    _parser.oob("+CIPRECVDATA,", callback(this, &WizFi360::_oob_tcp_data_hdlr));
 
     for (int i = 0; i < SOCKET_COUNT; i++) {
         _sock_i[i].open = false;
@@ -99,13 +98,13 @@ ESP8266::ESP8266(PinName tx, PinName rx, bool debug, PinName rts, PinName cts)
     }
 }
 
-bool ESP8266::at_available()
+bool WizFi360::at_available()
 {
     bool ready = false;
 
     _smutex.lock();
     // Might take a while to respond after HW reset
-    for (int i = 0; i < 5; i++) {
+    for(int i = 0; i < 5; i++) {
         ready = _parser.send("AT")
                 && _parser.recv("OK\n");
         if (ready) {
@@ -118,7 +117,7 @@ bool ESP8266::at_available()
     return ready;
 }
 
-bool ESP8266::echo_off()
+bool WizFi360::echo_off()
 {
     _smutex.lock();
     bool ready = _parser.send("ATE0")
@@ -128,7 +127,7 @@ bool ESP8266::echo_off()
     return ready;
 }
 
-struct ESP8266::fw_sdk_version ESP8266::sdk_version()
+struct WizFi360::fw_sdk_version WizFi360::sdk_version()
 {
     int major;
     int minor;
@@ -148,7 +147,7 @@ struct ESP8266::fw_sdk_version ESP8266::sdk_version()
     return _sdk_v;
 }
 
-struct ESP8266::fw_at_version ESP8266::at_version()
+struct WizFi360::fw_at_version WizFi360::at_version()
 {
     int major;
     int minor;
@@ -169,7 +168,7 @@ struct ESP8266::fw_at_version ESP8266::at_version()
     return _at_v;
 }
 
-bool ESP8266::stop_uart_hw_flow_ctrl(void)
+bool WizFi360::stop_uart_hw_flow_ctrl(void)
 {
     bool done = true;
 #if DEVICE_SERIAL_FC
@@ -178,8 +177,8 @@ bool ESP8266::stop_uart_hw_flow_ctrl(void)
         // Stop board's flow control
         _serial.set_flow_control(SerialBase::Disabled, _serial_rts, _serial_cts);
 
-        // Stop ESP8266's flow control
-        done = _parser.send("AT+UART_CUR=%u,8,1,0,0", ESP8266_DEFAULT_BAUD_RATE)
+        // Stop WizFi360's flow control
+        done = _parser.send("AT+UART_CUR=%u,8,1,0,0", WIZFI360_DEFAULT_BAUD_RATE)
                && _parser.recv("OK\n");
     }
 
@@ -187,15 +186,17 @@ bool ESP8266::stop_uart_hw_flow_ctrl(void)
     return done;
 }
 
-bool ESP8266::start_uart_hw_flow_ctrl(void)
+bool WizFi360::start_uart_hw_flow_ctrl(void)
 {
     bool done = true;
 
 #if DEVICE_SERIAL_FC
     _smutex.lock();
     if (_serial_rts != NC && _serial_cts != NC) {
-        // Start ESP8266's flow control
-        done = _parser.send("AT+UART_CUR=%u,8,1,0,3", ESP8266_DEFAULT_BAUD_RATE)
+       // Start board's flow control
+
+        // Start WizFi360's flow control
+        done = _parser.send("AT+UART_CUR=%u,8,1,0,3", WIZFI360_DEFAULT_BAUD_RATE)
                && _parser.recv("OK\n");
 
         if (done) {
@@ -206,13 +207,13 @@ bool ESP8266::start_uart_hw_flow_ctrl(void)
     } else if (_serial_rts != NC) {
         _serial.set_flow_control(SerialBase::RTS, _serial_rts, NC);
 
-        // Enable ESP8266's CTS pin
-        done = _parser.send("AT+UART_CUR=%u,8,1,0,2", ESP8266_DEFAULT_BAUD_RATE)
+        // Enable WizFi360's CTS pin
+        done = _parser.send("AT+UART_CUR=%u,8,1,0,2", WIZFI360_DEFAULT_BAUD_RATE)
                && _parser.recv("OK\n");
 
     } else if (_serial_cts != NC) {
-        // Enable ESP8266's RTS pin
-        done = _parser.send("AT+UART_CUR=%u,8,1,0,1", ESP8266_DEFAULT_BAUD_RATE)
+        // Enable WizFi360's RTS pin
+        done = _parser.send("AT+UART_CUR=%u,8,1,0,1", WIZFI360_DEFAULT_BAUD_RATE)
                && _parser.recv("OK\n");
 
         if (done) {
@@ -232,7 +233,7 @@ bool ESP8266::start_uart_hw_flow_ctrl(void)
     return done;
 }
 
-bool ESP8266::startup(int mode)
+bool WizFi360::startup(int mode)
 {
     if (!(mode == WIFIMODE_STATION || mode == WIFIMODE_SOFTAP
             || mode == WIFIMODE_STATION_SOFTAP)) {
@@ -240,7 +241,7 @@ bool ESP8266::startup(int mode)
     }
 
     _smutex.lock();
-    set_timeout(ESP8266_CONNECT_TIMEOUT);
+    set_timeout(WIZFI360_CONNECT_TIMEOUT);
     bool done = _parser.send("AT+CWMODE_CUR=%d", mode)
                 && _parser.recv("OK\n")
                 && _parser.send("AT+CIPMUX=1")
@@ -251,16 +252,16 @@ bool ESP8266::startup(int mode)
     return done;
 }
 
-bool ESP8266::reset(void)
+bool WizFi360::reset(void)
 {
-    static const int ESP8266_BOOTTIME = 10000; // [ms]
+    static const int WIZFI360_BOOTTIME = 10000; // [ms]
     bool done = false;
 
     _smutex.lock();
 
     unsigned long int start_time = rtos::Kernel::get_ms_count();
     _reset_done = false;
-    set_timeout(ESP8266_RECV_TIMEOUT);
+    set_timeout(WIZFI360_RECV_TIMEOUT);
     for (int i = 0; i < 2; i++) {
         if (!_parser.send("AT+RST") || !_parser.recv("OK\n")) {
             tr_debug("reset(): AT+RST failed or no response");
@@ -268,8 +269,8 @@ bool ESP8266::reset(void)
         }
 
         _rmutex.lock();
-        while ((rtos::Kernel::get_ms_count() - start_time < ESP8266_BOOTTIME) && !_reset_done) {
-            _process_oob(ESP8266_RECV_TIMEOUT, true); // UART mutex claimed -> need to check for OOBs ourselves
+        while ((rtos::Kernel::get_ms_count() - start_time < WIZFI360_BOOTTIME) && !_reset_done) {
+            _process_oob(WIZFI360_RECV_TIMEOUT, true); // UART mutex claimed -> need to check for OOBs ourselves
             _reset_check.wait_for(100); // Arbitrary relatively short delay
         }
 
@@ -281,15 +282,14 @@ bool ESP8266::reset(void)
     }
 
     tr_debug("reset(): done: %s", done ? "OK" : "FAIL");
-
-    _clear_socket_packets(ESP8266_ALL_SOCKET_IDS);
+    _clear_socket_packets(WIZFI360_ALL_SOCKET_IDS);
     set_timeout();
     _smutex.unlock();
 
     return done;
 }
 
-bool ESP8266::dhcp(bool enabled, int mode)
+bool WizFi360::dhcp(bool enabled, int mode)
 {
     //only 3 valid modes
     if (mode < 0 || mode > 2) {
@@ -304,11 +304,11 @@ bool ESP8266::dhcp(bool enabled, int mode)
     return done;
 }
 
-bool ESP8266::cond_enable_tcp_passive_mode()
+bool WizFi360::cond_enable_tcp_passive_mode()
 {
     bool done = true;
 
-    if (FW_AT_LEAST_VERSION(_at_v.major, _at_v.minor, _at_v.patch, 0, ESP8266_AT_VERSION_TCP_PASSIVE_MODE)) {
+    if (FW_AT_LEAST_VERSION(_at_v.major, _at_v.minor, _at_v.patch, 0, WIZFI360_AT_VERSION_TCP_PASSIVE_MODE)) {
         _smutex.lock();
         done = _parser.send("AT+CIPRECVMODE=1")
                && _parser.recv("OK\n");
@@ -321,12 +321,12 @@ bool ESP8266::cond_enable_tcp_passive_mode()
 }
 
 
-nsapi_error_t ESP8266::connect(const char *ap, const char *passPhrase)
+nsapi_error_t WizFi360::connect(const char *ap, const char *passPhrase)
 {
     nsapi_error_t ret = NSAPI_ERROR_OK;
 
     _smutex.lock();
-    set_timeout(ESP8266_CONNECT_TIMEOUT);
+    set_timeout(WIZFI360_CONNECT_TIMEOUT);
 
     _parser.send("AT+CWJAP_CUR=\"%s\",\"%s\"", ap, passPhrase);
     if (!_parser.recv("OK\n")) {
@@ -351,7 +351,7 @@ nsapi_error_t ESP8266::connect(const char *ap, const char *passPhrase)
     return ret;
 }
 
-bool ESP8266::disconnect(void)
+bool WizFi360::disconnect(void)
 {
     _smutex.lock();
     _disconnect = true;
@@ -361,10 +361,10 @@ bool ESP8266::disconnect(void)
     return done;
 }
 
-const char *ESP8266::ip_addr(void)
+const char *WizFi360::ip_addr(void)
 {
     _smutex.lock();
-    set_timeout(ESP8266_CONNECT_TIMEOUT);
+    set_timeout(WIZFI360_CONNECT_TIMEOUT);
     if (!(_parser.send("AT+CIFSR")
             && _parser.recv("+CIFSR:STAIP,\"%15[^\"]\"", _ip_buffer)
             && _parser.recv("OK\n"))) {
@@ -377,7 +377,7 @@ const char *ESP8266::ip_addr(void)
     return _ip_buffer;
 }
 
-const char *ESP8266::mac_addr(void)
+const char *WizFi360::mac_addr(void)
 {
     _smutex.lock();
     if (!(_parser.send("AT+CIFSR")
@@ -391,7 +391,7 @@ const char *ESP8266::mac_addr(void)
     return _mac_buffer;
 }
 
-const char *ESP8266::gateway()
+const char *WizFi360::gateway()
 {
     _smutex.lock();
     if (!(_parser.send("AT+CIPSTA_CUR?")
@@ -405,7 +405,7 @@ const char *ESP8266::gateway()
     return _gateway_buffer;
 }
 
-const char *ESP8266::netmask()
+const char *WizFi360::netmask()
 {
     _smutex.lock();
     if (!(_parser.send("AT+CIPSTA_CUR?")
@@ -419,13 +419,13 @@ const char *ESP8266::netmask()
     return _netmask_buffer;
 }
 
-int8_t ESP8266::rssi()
+int8_t WizFi360::rssi()
 {
     int8_t rssi;
     char bssid[18];
 
     _smutex.lock();
-    set_timeout(ESP8266_CONNECT_TIMEOUT);
+    set_timeout(WIZFI360_CONNECT_TIMEOUT);
     if (!(_parser.send("AT+CWJAP_CUR?")
             && _parser.recv("+CWJAP_CUR:\"%*[^\"]\",\"%17[^\"]\"", bssid)
             && _parser.recv("OK\n"))) {
@@ -436,7 +436,7 @@ int8_t ESP8266::rssi()
     _smutex.unlock();
 
     _smutex.lock();
-    set_timeout(ESP8266_CONNECT_TIMEOUT);
+    set_timeout(WIZFI360_CONNECT_TIMEOUT);
     if (!(_parser.send("AT+CWLAP=\"\",\"%s\",", bssid)
             && _parser.recv("+CWLAP:(%*d,\"%*[^\"]\",%hhd,", &rssi)
             && _parser.recv("OK\n"))) {
@@ -449,12 +449,12 @@ int8_t ESP8266::rssi()
     return rssi;
 }
 
-int ESP8266::scan(WiFiAccessPoint *res, unsigned limit, scan_mode mode, unsigned t_max, unsigned t_min)
+int WIZFI360::scan(WiFiAccessPoint *res, unsigned limit, scan_mode mode, unsigned t_max, unsigned t_min)
 {
     _smutex.lock();
 
     // Default timeout plus time spend scanning each channel
-    set_timeout(ESP8266_MISC_TIMEOUT + 13 * (t_max ? t_max : ESP8266_SCAN_TIME_MAX_DEFAULT));
+    set_timeout(WIZFI360_MISC_TIMEOUT + 13 * (t_max ? t_max : WIZFI360_SCAN_TIME_MAX_DEFAULT));
 
     _scan_r.res = res;
     _scan_r.limit = limit;
@@ -462,7 +462,7 @@ int ESP8266::scan(WiFiAccessPoint *res, unsigned limit, scan_mode mode, unsigned
 
     bool ret_parse_send = true;
 
-    if (FW_AT_LEAST_VERSION(_at_v.major, _at_v.minor, _at_v.patch, 0, ESP8266_AT_VERSION_WIFI_SCAN_CHANGE)) {
+    if (FW_AT_LEAST_VERSION(_at_v.major, _at_v.minor, _at_v.patch, 0, WIZFI360_AT_VERSION_WIFI_SCAN_CHANGE)) {
         ret_parse_send = _parser.send("AT+CWLAP=,,,%u,%u,%u", (mode == SCANMODE_ACTIVE ? 0 : 1), t_min, t_max);
     } else {
         ret_parse_send = _parser.send("AT+CWLAP");
@@ -475,7 +475,6 @@ int ESP8266::scan(WiFiAccessPoint *res, unsigned limit, scan_mode mode, unsigned
             _scan_r.cnt = NSAPI_ERROR_DEVICE_ERROR;
         }
     }
-
     int cnt = _scan_r.cnt;
     _scan_r.res = NULL;
 
@@ -485,7 +484,7 @@ int ESP8266::scan(WiFiAccessPoint *res, unsigned limit, scan_mode mode, unsigned
     return cnt;
 }
 
-nsapi_error_t ESP8266::open_udp(int id, const char *addr, int port, int local_port)
+nsapi_error_t WizFi360::open_udp(int id, const char *addr, int port, int local_port)
 {
     static const char *type = "UDP";
     bool done = false;
@@ -493,7 +492,7 @@ nsapi_error_t ESP8266::open_udp(int id, const char *addr, int port, int local_po
     _smutex.lock();
 
     // process OOB so that _sock_i reflects the correct state of the socket
-    _process_oob(ESP8266_SEND_TIMEOUT, true);
+    _process_oob(WIZFI360_SEND_TIMEOUT, true);
 
     if (id >= SOCKET_COUNT || _sock_i[id].open) {
         _smutex.unlock();
@@ -536,7 +535,7 @@ nsapi_error_t ESP8266::open_udp(int id, const char *addr, int port, int local_po
     return done ? NSAPI_ERROR_OK : NSAPI_ERROR_DEVICE_ERROR;
 }
 
-nsapi_error_t ESP8266::open_tcp(int id, const char *addr, int port, int keepalive)
+nsapi_error_t WizFi360::open_tcp(int id, const char *addr, int port, int keepalive)
 {
     static const char *type = "TCP";
     bool done = false;
@@ -544,7 +543,7 @@ nsapi_error_t ESP8266::open_tcp(int id, const char *addr, int port, int keepaliv
     _smutex.lock();
 
     // process OOB so that _sock_i reflects the correct state of the socket
-    _process_oob(ESP8266_SEND_TIMEOUT, true);
+    _process_oob(WIZFI360_SEND_TIMEOUT, true);
 
     if (id >= SOCKET_COUNT || _sock_i[id].open) {
         _smutex.unlock();
@@ -587,7 +586,7 @@ nsapi_error_t ESP8266::open_tcp(int id, const char *addr, int port, int keepaliv
     return done ? NSAPI_ERROR_OK : NSAPI_ERROR_DEVICE_ERROR;
 }
 
-bool ESP8266::dns_lookup(const char *name, char *ip)
+bool WizFi360::dns_lookup(const char *name, char *ip)
 {
     _smutex.lock();
     bool done = _parser.send("AT+CIPDOMAIN=\"%s\"", name) && _parser.recv("+CIPDOMAIN:%s%*[\r]%*[\n]", ip);
@@ -596,30 +595,30 @@ bool ESP8266::dns_lookup(const char *name, char *ip)
     return done;
 }
 
-nsapi_error_t ESP8266::send(int id, const void *data, uint32_t amount)
+nsapi_error_t WizFi360::send(int id, const void *data, uint32_t amount)
 {
     nsapi_error_t ret = NSAPI_ERROR_DEVICE_ERROR;
     // +CIPSEND supports up to 2048 bytes at a time
     // Data stream can be truncated
     if (amount > 2048 && _sock_i[id].proto == NSAPI_TCP) {
         amount = 2048;
-        // Datagram must stay intact
+    // Datagram must stay intact
     } else if (amount > 2048 && _sock_i[id].proto == NSAPI_UDP) {
         tr_debug("UDP datagram maximum size is 2048");
         return NSAPI_ERROR_PARAMETER;
     }
 
     _smutex.lock();
-    set_timeout(ESP8266_SEND_TIMEOUT);
+    set_timeout(WIZFI360_SEND_TIMEOUT);
     _busy = false;
     _error = false;
     if (!_parser.send("AT+CIPSEND=%d,%" PRIu32, id, amount)) {
-        tr_debug("ESP8266::send(): AT+CIPSEND failed");
+        tr_debug("WizFi360::send(): AT+CIPSEND failed");
         goto END;
     }
 
-    if (!_parser.recv(">")) {
-        tr_debug("ESP8266::send(): didn't get \">\"");
+    if(!_parser.recv(">")) {
+        tr_debug("WizFi360::send(): didn't get \">\"");
         ret = NSAPI_ERROR_WOULD_BLOCK;
         goto END;
     }
@@ -629,27 +628,27 @@ nsapi_error_t ESP8266::send(int id, const void *data, uint32_t amount)
     }
 
 END:
-    _process_oob(ESP8266_RECV_TIMEOUT, true); // Drain USART receive register to avoid data overrun
+    _process_oob(WIZFI360_RECV_TIMEOUT, true); // Drain USART receive register to avoid data overrun
 
     // error hierarchy, from low to high
     if (_busy) {
         ret = NSAPI_ERROR_WOULD_BLOCK;
-        tr_debug("ESP8266::send(): modem busy");
+        tr_debug("WizFi360::send(): modem busy");
     }
 
     if (ret == NSAPI_ERROR_DEVICE_ERROR) {
         ret = NSAPI_ERROR_WOULD_BLOCK;
-        tr_debug("ESP8266::send(): send failed");
+        tr_debug("WizFi360::send(): send failed");
     }
 
     if (_error) {
         ret = NSAPI_ERROR_CONNECTION_LOST;
-        tr_debug("ESP8266::send(): connection disrupted");
+        tr_debug("WizFi360::send(): connection disrupted");
     }
 
     if (!_sock_i[id].open && ret != NSAPI_ERROR_OK) {
         ret = NSAPI_ERROR_CONNECTION_LOST;
-        tr_debug("ESP8266::send(): socket closed abruptly");
+        tr_debug("WizFi360::send(): socket closed abruptly");
     }
 
     set_timeout();
@@ -658,7 +657,7 @@ END:
     return ret;
 }
 
-void ESP8266::_oob_packet_hdlr()
+void WizFi360::_oob_packet_hdlr()
 {
     int id;
     int amount;
@@ -669,7 +668,7 @@ void ESP8266::_oob_packet_hdlr()
         return;
     }
 
-    if (_tcp_passive && _sock_i[id].open == true && _sock_i[id].proto == NSAPI_TCP) {
+    if(_tcp_passive && _sock_i[id].open == true && _sock_i[id].proto == NSAPI_TCP) {
         if (_parser.recv("%d\n", &amount)) {
             _sock_i[id].tcp_data_avbl = amount;
 
@@ -685,8 +684,8 @@ void ESP8266::_oob_packet_hdlr()
 
     pdu_len = sizeof(struct packet) + amount;
 
-    if ((_heap_usage + pdu_len) > MBED_CONF_ESP8266_SOCKET_BUFSIZE) {
-        tr_debug("\"esp8266.socket-bufsize\"-limit exceeded, packet dropped");
+    if ((_heap_usage + pdu_len) > MBED_CONF_WIZFI360_SOCKET_BUFSIZE) {
+        tr_debug("\"WIZFI360.socket-bufsize\"-limit exceeded, packet dropped");
         return;
     }
 
@@ -713,7 +712,7 @@ void ESP8266::_oob_packet_hdlr()
     _packets_end = &packet->next;
 }
 
-void ESP8266::_process_oob(uint32_t timeout, bool all)
+void WizFi360::_process_oob(uint32_t timeout, bool all)
 {
     set_timeout(timeout);
     // Poll for inbound packets
@@ -722,14 +721,14 @@ void ESP8266::_process_oob(uint32_t timeout, bool all)
     set_timeout();
 }
 
-void ESP8266::bg_process_oob(uint32_t timeout, bool all)
+void WizFi360::bg_process_oob(uint32_t timeout, bool all)
 {
     _smutex.lock();
     _process_oob(timeout, all);
     _smutex.unlock();
 }
 
-int32_t ESP8266::_recv_tcp_passive(int id, void *data, uint32_t amount, uint32_t timeout)
+int32_t WizFi360::_recv_tcp_passive(int id, void *data, uint32_t amount, uint32_t timeout)
 {
     int32_t ret = NSAPI_ERROR_WOULD_BLOCK;
 
@@ -738,7 +737,7 @@ int32_t ESP8266::_recv_tcp_passive(int id, void *data, uint32_t amount, uint32_t
     _process_oob(timeout, true);
 
     if (_sock_i[id].tcp_data_avbl != 0) {
-        _sock_i[id].tcp_data = (char *)data;
+        _sock_i[id].tcp_data = (char*)data;
         _sock_i[id].tcp_data_rcvd = NSAPI_ERROR_WOULD_BLOCK;
         _sock_active_id = id;
 
@@ -760,7 +759,7 @@ int32_t ESP8266::_recv_tcp_passive(int id, void *data, uint32_t amount, uint32_t
         if (_sock_i[id].tcp_data_rcvd > 0) {
             if (_sock_i[id].tcp_data_rcvd > (int32_t)amount) {
                 MBED_ERROR(MBED_MAKE_ERROR(MBED_MODULE_DRIVER, MBED_ERROR_CODE_EBADMSG), \
-                           "ESP8266::_recv_tcp_passive() too much data from modem\n");
+                           "WizFi360::_recv_tcp_passive() too much data from modem\n");
             }
             if (_sock_i[id].tcp_data_avbl > _sock_i[id].tcp_data_rcvd) {
                 _sock_i[id].tcp_data_avbl -= _sock_i[id].tcp_data_rcvd;
@@ -780,7 +779,7 @@ int32_t ESP8266::_recv_tcp_passive(int id, void *data, uint32_t amount, uint32_t
     return ret;
 
 BUSY:
-    _process_oob(ESP8266_RECV_TIMEOUT, true);
+    _process_oob(WIZFI360_RECV_TIMEOUT, true);
     if (_busy) {
         tr_debug("_recv_tcp_passive(): modem busy");
         ret = NSAPI_ERROR_WOULD_BLOCK;
@@ -792,7 +791,7 @@ BUSY:
     return ret;
 }
 
-int32_t ESP8266::recv_tcp(int id, void *data, uint32_t amount, uint32_t timeout)
+int32_t WizFi360::recv_tcp(int id, void *data, uint32_t amount, uint32_t timeout)
 {
     if (_tcp_passive) {
         return _recv_tcp_passive(id, data, amount, timeout);
@@ -850,7 +849,7 @@ int32_t ESP8266::recv_tcp(int id, void *data, uint32_t amount, uint32_t timeout)
     return NSAPI_ERROR_WOULD_BLOCK;
 }
 
-int32_t ESP8266::recv_udp(int id, void *data, uint32_t amount, uint32_t timeout)
+int32_t WizFi360::recv_udp(int id, void *data, uint32_t amount, uint32_t timeout)
 {
     _smutex.lock();
     set_timeout(timeout);
@@ -893,12 +892,12 @@ int32_t ESP8266::recv_udp(int id, void *data, uint32_t amount, uint32_t timeout)
     return NSAPI_ERROR_WOULD_BLOCK;
 }
 
-void ESP8266::_clear_socket_packets(int id)
+void WizFi360::_clear_socket_packets(int id)
 {
     struct packet **p = &_packets;
 
     while (*p) {
-        if ((*p)->id == id || id == ESP8266_ALL_SOCKET_IDS) {
+        if ((*p)->id == id || id == WIZFI360_ALL_SOCKET_IDS) {
             struct packet *q = *p;
             int pdu_len = sizeof(struct packet) + q->alloc_len;
 
@@ -913,7 +912,7 @@ void ESP8266::_clear_socket_packets(int id)
             p = &(*p)->next;
         }
     }
-    if (id == ESP8266_ALL_SOCKET_IDS) {
+    if (id == WIZFI360_ALL_SOCKET_IDS) {
         for (int id = 0; id < 5; id++) {
             _sock_i[id].tcp_data_avbl = 0;
         }
@@ -922,7 +921,7 @@ void ESP8266::_clear_socket_packets(int id)
     }
 }
 
-bool ESP8266::close(int id)
+bool WizFi360::close(int id)
 {
     //May take a second try if device is busy
     for (unsigned i = 0; i < 2; i++) {
@@ -934,7 +933,7 @@ bool ESP8266::close(int id)
                     _sock_i[id].open = false;
                     _clear_socket_packets(id);
                     _smutex.unlock();
-                    // ESP8266 has a habit that it might close a socket on its own.
+                    // WizFi360 has a habit that it might close a socket on its own.
                     return true;
                 }
             } else {
@@ -950,60 +949,60 @@ bool ESP8266::close(int id)
     return false;
 }
 
-void ESP8266::set_timeout(uint32_t timeout_ms)
+void WizFi360::set_timeout(uint32_t timeout_ms)
 {
     _parser.set_timeout(timeout_ms);
 }
 
-bool ESP8266::readable()
+bool WizFi360::readable()
 {
     return _serial.FileHandle::readable();
 }
 
-bool ESP8266::writeable()
+bool WizFi360::writeable()
 {
     return _serial.FileHandle::writable();
 }
 
-void ESP8266::sigio(Callback<void()> func)
+void WizFi360::sigio(Callback<void()> func)
 {
     _serial.sigio(func);
     _callback = func;
 }
 
-void ESP8266::attach(Callback<void()> status_cb)
+void WizFi360::attach(Callback<void()> status_cb)
 {
     _conn_stat_cb = status_cb;
 }
 
-bool ESP8266::_recv_ap(nsapi_wifi_ap_t *ap)
+bool WizFi360::_recv_ap(nsapi_wifi_ap_t *ap)
 {
     int sec = NSAPI_SECURITY_UNKNOWN;
     int dummy;
     int ret;
 
-    if (FW_AT_LEAST_VERSION(_at_v.major, _at_v.minor, _at_v.patch, 0, ESP8266_AT_VERSION_WIFI_SCAN_CHANGE)) {
+    if (FW_AT_LEAST_VERSION(_at_v.major, _at_v.minor, _at_v.patch, 0, WIZFI360_AT_VERSION_WIFI_SCAN_CHANGE)) {
         ret = _parser.scanf("(%d,\"%32[^\"]\",%hhd,\"%hhx:%hhx:%hhx:%hhx:%hhx:%hhx\",%hhu,%d,%d,%d,%d,%d,%d)\n",
                             &sec,
-                            ap->ssid,
-                            &ap->rssi,
-                            &ap->bssid[0], &ap->bssid[1], &ap->bssid[2], &ap->bssid[3], &ap->bssid[4], &ap->bssid[5],
-                            &ap->channel,
-                            &dummy,
-                            &dummy,
-                            &dummy,
-                            &dummy,
-                            &dummy,
-                            &dummy);
+                        ap->ssid,
+                        &ap->rssi,
+                        &ap->bssid[0], &ap->bssid[1], &ap->bssid[2], &ap->bssid[3], &ap->bssid[4], &ap->bssid[5],
+                        &ap->channel,
+                        &dummy,
+                        &dummy,
+                        &dummy,
+                        &dummy,
+                        &dummy,
+                        &dummy);
     } else {
         ret = _parser.scanf("(%d,\"%32[^\"]\",%hhd,\"%hhx:%hhx:%hhx:%hhx:%hhx:%hhx\",%hhu,%d,%d)\n",
                             &sec,
-                            ap->ssid,
-                            &ap->rssi,
-                            &ap->bssid[0], &ap->bssid[1], &ap->bssid[2], &ap->bssid[3], &ap->bssid[4], &ap->bssid[5],
-                            &ap->channel,
-                            &dummy,
-                            &dummy);
+                        ap->ssid,
+                        &ap->rssi,
+                        &ap->bssid[0], &ap->bssid[1], &ap->bssid[2], &ap->bssid[3], &ap->bssid[4], &ap->bssid[5],
+                        &ap->channel,
+                        &dummy,
+                        &dummy);
     }
 
     if (ret < 0) {
@@ -1016,13 +1015,13 @@ bool ESP8266::_recv_ap(nsapi_wifi_ap_t *ap)
     return ret < 0 ? false : true;
 }
 
-void ESP8266::_oob_watchdog_reset()
+void WizFi360::_oob_watchdog_reset()
 {
     MBED_ERROR(MBED_MAKE_ERROR(MBED_MODULE_DRIVER, MBED_ERROR_CODE_ETIME), \
                "_oob_watchdog_reset() modem watchdog reset triggered\n");
 }
 
-void ESP8266::_oob_ready()
+void WIZFI360::_oob_ready()
 {
 
     _rmutex.lock();
@@ -1041,7 +1040,7 @@ void ESP8266::_oob_ready()
     tr_debug("_oob_reset(): reset detected");
 }
 
-void ESP8266::_oob_busy()
+void WizFi360::_oob_busy()
 {
     char status[5];
     if (_parser.recv("%4[^\"]\n", status)) {
@@ -1052,17 +1051,17 @@ void ESP8266::_oob_busy()
         } else {
             tr_error("unrecognized busy state \'%s\'", status);
             MBED_ERROR(MBED_MAKE_ERROR(MBED_MODULE_DRIVER, MBED_ERROR_CODE_EBADMSG), \
-                       "ESP8266::_oob_busy() unrecognized busy state\n");
+                       "WizFi360::_oob_busy() unrecognized busy state\n");
         }
     } else {
         MBED_ERROR(MBED_MAKE_ERROR(MBED_MODULE_DRIVER, MBED_ERROR_CODE_ENOMSG), \
-                   "ESP8266::_oob_busy() AT timeout\n");
+                   "WizFi360::_oob_busy() AT timeout\n");
     }
     _busy = true;
     _parser.abort();
 }
 
-void ESP8266::_oob_tcp_data_hdlr()
+void WizFi360::_oob_tcp_data_hdlr()
 {
     int32_t len;
 
@@ -1079,7 +1078,7 @@ void ESP8266::_oob_tcp_data_hdlr()
     _sock_i[_sock_active_id].tcp_data_rcvd = len;
 }
 
-void ESP8266::_oob_scan_results()
+void WIZFI360::_oob_scan_results()
 {
     nsapi_wifi_ap_t ap;
 
@@ -1092,7 +1091,7 @@ void ESP8266::_oob_scan_results()
     }
 }
 
-void ESP8266::_oob_connect_err()
+void WIZFI360::_oob_connect_err()
 {
     _fail = false;
     _connect_error = 0;
@@ -1104,19 +1103,19 @@ void ESP8266::_oob_connect_err()
 }
 
 
-void ESP8266::_oob_conn_already()
+void WizFi360::_oob_conn_already()
 {
     _sock_already = true;
     _parser.abort();
 }
 
-void ESP8266::_oob_err()
+void WizFi360::_oob_err()
 {
     _error = true;
     _parser.abort();
 }
 
-void ESP8266::_oob_socket_close_err()
+void WizFi360::_oob_socket_close_err()
 {
     if (_error) {
         _error = false;
@@ -1124,42 +1123,42 @@ void ESP8266::_oob_socket_close_err()
     _closed = true; // Not possible to pinpoint to a certain socket
 }
 
-void ESP8266::_oob_socket0_closed()
+void WizFi360::_oob_socket0_closed()
 {
     static const int id = 0;
     _sock_i[id].open = false;
     tr_debug("socket %d closed", id);
 }
 
-void ESP8266::_oob_socket1_closed()
+void WizFi360::_oob_socket1_closed()
 {
     static const int id = 1;
     _sock_i[id].open = false;
     tr_debug("socket %d closed", id);
 }
 
-void ESP8266::_oob_socket2_closed()
+void WizFi360::_oob_socket2_closed()
 {
     static const int id = 2;
     _sock_i[id].open = false;
     tr_debug("socket %d closed", id);
 }
 
-void ESP8266::_oob_socket3_closed()
+void WizFi360::_oob_socket3_closed()
 {
     static const int id = 3;
     _sock_i[id].open = false;
     tr_debug("socket %d closed", id);
 }
 
-void ESP8266::_oob_socket4_closed()
+void WizFi360::_oob_socket4_closed()
 {
     static const int id = 4;
     _sock_i[id].open = false;
     tr_debug("socket %d closed", id);
 }
 
-void ESP8266::_oob_connection_status()
+void WizFi360::_oob_connection_status()
 {
     char status[13];
     if (_parser.recv("%12[^\"]\n", status)) {
@@ -1177,7 +1176,7 @@ void ESP8266::_oob_connection_status()
         } else {
             tr_error("invalid AT cmd \'%s\'", status);
             MBED_ERROR(MBED_MAKE_ERROR(MBED_MODULE_DRIVER, MBED_ERROR_CODE_EBADMSG), \
-                       "ESP8266::_oob_connection_status: invalid AT cmd\n");
+                       "WizFi360::_oob_connection_status: invalid AT cmd\n");
         }
     } else {
         tr_error("_oob_connection_status(): network status timeout, disconnecting");
@@ -1193,7 +1192,7 @@ void ESP8266::_oob_connection_status()
     _conn_stat_cb();
 }
 
-int8_t ESP8266::default_wifi_mode()
+int8_t WizFi360::default_wifi_mode()
 {
     int8_t mode;
 
@@ -1209,14 +1208,14 @@ int8_t ESP8266::default_wifi_mode()
     return 0;
 }
 
-void ESP8266::flush()
+void WizFi360::flush()
 {
     _smutex.lock();
     _parser.flush();
     _smutex.unlock();
 }
 
-bool ESP8266::set_default_wifi_mode(const int8_t mode)
+bool WizFi360::set_default_wifi_mode(const int8_t mode)
 {
     _smutex.lock();
     bool done = _parser.send("AT+CWMODE_DEF=%hhd", mode)
@@ -1226,14 +1225,14 @@ bool ESP8266::set_default_wifi_mode(const int8_t mode)
     return done;
 }
 
-nsapi_connection_status_t ESP8266::connection_status() const
+nsapi_connection_status_t WizFi360::connection_status() const
 {
     return _conn_status;
 }
 
-bool ESP8266::set_country_code_policy(bool track_ap, const char *country_code, int channel_start, int channels)
+bool WIZFI360::set_country_code_policy(bool track_ap, const char *country_code, int channel_start, int channels)
 {
-    if (!(FW_AT_LEAST_VERSION(_at_v.major, _at_v.minor, _at_v.patch, 0, ESP8266_AT_VERSION_WIFI_SCAN_CHANGE))) {
+    if (!(FW_AT_LEAST_VERSION(_at_v.major, _at_v.minor, _at_v.patch, 0, WIZFI360_AT_VERSION_WIFI_SCAN_CHANGE))) {
         return true;
     }
 

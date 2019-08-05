@@ -1,4 +1,6 @@
-/* ESP8266 implementation of NetworkInterfaceAPI
+/* This WizFi360 Driver referred to WIZFI360 Driver in mbed-os
+ *
+ * WIZFI360 implementation of NetworkInterfaceAPI
  * Copyright (c) 2015 ARM Limited
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,13 +16,13 @@
  * limitations under the License.
  */
 
-#ifndef ESP8266_INTERFACE_H
-#define ESP8266_INTERFACE_H
+#ifndef WIZFI360_INTERFACE_H
+#define WIZFI360_INTERFACE_H
 
-#if DEVICE_SERIAL && DEVICE_INTERRUPTIN && defined(MBED_CONF_EVENTS_PRESENT) && defined(MBED_CONF_NSAPI_PRESENT) && defined(MBED_CONF_RTOS_PRESENT)
+#if DEVICE_SERIAL && defined(MBED_CONF_EVENTS_PRESENT) && defined(MBED_CONF_NSAPI_PRESENT) && defined(MBED_CONF_RTOS_PRESENT)
 #include "drivers/DigitalOut.h"
 #include "drivers/Timer.h"
-#include "ESP8266/ESP8266.h"
+#include "WizFi360/WizFi360.h"
 #include "events/EventQueue.h"
 #include "events/mbed_shared_queues.h"
 #include "features/netsocket/NetworkInterface.h"
@@ -33,57 +35,55 @@
 #include "rtos/ConditionVariable.h"
 #include "rtos/Mutex.h"
 
-#define ESP8266_SOCKET_COUNT 5
+#define WIZFI360_SOCKET_COUNT 5
 
-#define ESP8266_INTERFACE_CONNECT_INTERVAL_MS (5000)
-#define ESP8266_INTERFACE_CONNECT_TIMEOUT_MS (2 * ESP8266_CONNECT_TIMEOUT + ESP8266_INTERFACE_CONNECT_INTERVAL_MS)
-
+#define WIZFI360_INTERFACE_CONNECT_INTERVAL_MS (5000)
+#define WIZFI360_INTERFACE_CONNECT_TIMEOUT_MS (2 * WIZFI360_CONNECT_TIMEOUT + WIZFI360_INTERFACE_CONNECT_INTERVAL_MS)
 #ifdef TARGET_FF_ARDUINO
-#ifndef MBED_CONF_ESP8266_TX
-#define MBED_CONF_ESP8266_TX D1
+#ifndef MBED_CONF_WIZFI360_TX
+#define MBED_CONF_WIZFI360_TX D1
 #endif
 
-#ifndef MBED_CONF_ESP8266_RX
-#define MBED_CONF_ESP8266_RX D0
+#ifndef MBED_CONF_WIZFI360_RX
+#define MBED_CONF_WIZFI360_RX D0
 #endif
 #endif /* TARGET_FF_ARDUINO */
 
-#ifndef MBED_CONF_ESP8266_COUNTRY_CODE
-#define MBED_CONF_ESP8266_COUNTRY_CODE "CN"
+#ifndef MBED_CONF_WIZFI360_COUNTRY_CODE
+#define MBED_CONF_WIZFI360_COUNTRY_CODE "CN"
 #endif
 
-#ifndef MBED_CONF_ESP8266_CHANNEL_START
-#define MBED_CONF_ESP8266_CHANNEL_START 1
+#ifndef MBED_CONF_WIZFI360_CHANNEL_START
+#define MBED_CONF_WIZFI360_CHANNEL_START 1
 #endif
 
-#ifndef MBED_CONF_ESP8266_CHANNELS
-#define MBED_CONF_ESP8266_CHANNELS 13
+#ifndef MBED_CONF_WIZFI360_CHANNELS
+#define MBED_CONF_WIZFI360_CHANNELS 13
 #endif
-
-/** ESP8266Interface class
- *  Implementation of the NetworkStack for the ESP8266
+/** WizFi360Interface class
+ *  Implementation of the NetworkStack for the WizFi360
  */
-class ESP8266Interface : public NetworkStack, public WiFiInterface {
+class WizFi360Interface : public NetworkStack, public WiFiInterface {
 public:
-#if defined MBED_CONF_ESP8266_TX && defined MBED_CONF_ESP8266_RX
+#if defined MBED_CONF_WIZFI360_TX && defined MBED_CONF_WIZFI360_RX
     /**
-     * @brief ESP8266Interface default constructor
+     * @brief WizFi360Interface default constructor
      *        Will use values defined in mbed_lib.json
      */
-    ESP8266Interface();
+    WizFi360Interface();
 #endif
 
-    /** ESP8266Interface lifetime
+    /** WizFi360Interface lifetime
      * @param tx        TX pin
      * @param rx        RX pin
      * @param debug     Enable debugging
      */
-    ESP8266Interface(PinName tx, PinName rx, bool debug = false, PinName rts = NC, PinName cts = NC, PinName rst = NC);
+    WizFi360Interface(PinName tx, PinName rx, bool debug = false, PinName rts = NC, PinName cts = NC, PinName rst = NC);
 
     /**
-     * @brief ESP8266Interface default destructor
+     * @brief WizFi360Interface default destructor
      */
-    virtual ~ESP8266Interface();
+    virtual ~WizFi360Interface();
 
     /** Start the interface
      *
@@ -97,9 +97,6 @@ public:
     /** Start the interface
      *
      *  Attempts to connect to a WiFi network.
-     *
-     *  If interface is configured blocking it will timeout after up to
-     *  ESP8266_INTERFACE_CONNECT_TIMEOUT_MS + ESP8266_CONNECT_TIMEOUT ms.
      *
      *  @param ssid      Name of the network to connect to
      *  @param pass      Security passphrase to connect to the network
@@ -175,10 +172,11 @@ public:
      *
      * This function will block.
      *
-     * @param  ap    Pointer to allocated array to store discovered AP
-     * @param  count Size of allocated @a res array, or 0 to only count available AP
-     * @return       Number of entries in @a, or if @a count was 0 number of available networks, negative on error
-     *               see @a nsapi_error
+     * @param  ap       Pointer to allocated array to store discovered AP
+     * @param  count    Size of allocated @a res array, or 0 to only count available AP
+     * @param  timeout  Timeout in milliseconds; 0 for no timeout (Default: 0)
+     * @return          Number of entries in @a, or if @a count was 0 number of available networks, negative on error
+     *                  see @a nsapi_error
      */
     virtual int scan(WiFiAccessPoint *res, unsigned count);
 
@@ -235,8 +233,8 @@ public:
      *  on the network. The parameters on the callback are the event type and
      *  event-type dependent reason parameter.
      *
-     *  In ESP8266 the callback will be called when processing OOB-messages via
-     *  AT-parser. Do NOT call any ESP8266Interface -functions or do extensive
+     *  In WizFi360 the callback will be called when processing OOB-messages via
+     *  AT-parser. Do NOT call any WizFi360Interface -functions or do extensive
      *  processing in the callback.
      *
      *  @param status_cb The callback for status changes
@@ -366,7 +364,7 @@ protected:
 
     /** Set country code
      *
-     *  @param track_ap      if TRUE, use country code used by the AP ESP is connected to,
+     *  @param track_ap      if TRUE, use country code used by the AP WIZFI360 is connected to,
      *                       otherwise uses country_code always
      *  @param country_code  ISO 3166-1 coded, 2 character alphanumeric country code assumed
      *  @param len           Length of the country code
@@ -378,7 +376,7 @@ protected:
 
 private:
     // AT layer
-    ESP8266 _esp;
+    WizFi360 _wizfi360;
     void refresh_conn_state_cb();
 
     // HW reset pin
@@ -394,16 +392,16 @@ private:
 
 
     // Credentials
-    static const int ESP8266_SSID_MAX_LENGTH = 32; /* 32 is what 802.11 defines as longest possible name */
-    char ap_ssid[ESP8266_SSID_MAX_LENGTH + 1]; /* The longest possible name; +1 for the \0 */
-    static const int ESP8266_PASSPHRASE_MAX_LENGTH = 63; /* The longest allowed passphrase */
-    static const int ESP8266_PASSPHRASE_MIN_LENGTH = 8; /* The shortest allowed passphrase */
-    char ap_pass[ESP8266_PASSPHRASE_MAX_LENGTH + 1]; /* The longest possible passphrase; +1 for the \0 */
+    static const int WIZFI360_SSID_MAX_LENGTH = 32; /* 32 is what 802.11 defines as longest possible name */
+    char ap_ssid[WIZFI360_SSID_MAX_LENGTH + 1]; /* The longest possible name; +1 for the \0 */
+    static const int WIZFI360_PASSPHRASE_MAX_LENGTH = 63; /* The longest allowed passphrase */
+    static const int WIZFI360_PASSPHRASE_MIN_LENGTH = 8; /* The shortest allowed passphrase */
+    char ap_pass[WIZFI360_PASSPHRASE_MAX_LENGTH + 1]; /* The longest possible passphrase; +1 for the \0 */
     nsapi_security_t _ap_sec;
 
     // Country code
     struct _channel_info {
-        bool track_ap; // Set country code based on the AP ESP is connected to
+        bool track_ap; // Set country code based on the AP WIZFI360 is connected to
         char country_code[4]; // ISO 3166-1 coded, 2-3 character alphanumeric country code - +1 for the '\0' - assumed. Documentation doesn't tell.
         int channel_start;
         int channels;
@@ -422,7 +420,7 @@ private:
         bool open;
         uint16_t sport;
     };
-    struct _sock_info _sock_i[ESP8266_SOCKET_COUNT];
+    struct _sock_info _sock_i[WIZFI360_SOCKET_COUNT];
 
     // Driver's state
     int _initialized;
@@ -436,7 +434,7 @@ private:
         void (*callback)(void *);
         void *data;
         uint8_t deferred;
-    } _cbs[ESP8266_SOCKET_COUNT];
+    } _cbs[WIZFI360_SOCKET_COUNT];
     void event();
     void event_deferred();
 
