@@ -1021,7 +1021,7 @@ void WizFi360::_oob_watchdog_reset()
                "_oob_watchdog_reset() modem watchdog reset triggered\n");
 }
 
-void WIZFI360::_oob_ready()
+void WizFi360::_oob_ready()
 {
 
     _rmutex.lock();
@@ -1078,7 +1078,7 @@ void WizFi360::_oob_tcp_data_hdlr()
     _sock_i[_sock_active_id].tcp_data_rcvd = len;
 }
 
-void WIZFI360::_oob_scan_results()
+void WizFi360::_oob_scan_results()
 {
     nsapi_wifi_ap_t ap;
 

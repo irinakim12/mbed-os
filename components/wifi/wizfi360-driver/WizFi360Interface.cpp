@@ -387,7 +387,7 @@ int WizFi360Interface::scan(WiFiAccessPoint *res, unsigned count)
     return scan(res, count, SCANMODE_ACTIVE, 0, 0);
 }
 
-intWizFi360Interface::scan(WiFiAccessPoint *res, unsigned count, scan_mode mode, unsigned t_max, unsigned t_min)
+int WizFi360Interface::scan(WiFiAccessPoint *res, unsigned count, scan_mode mode, unsigned t_max, unsigned t_min)
 {
     if (t_max > WIZFI360_SCAN_TIME_MAX) {
         return NSAPI_ERROR_PARAMETER;
@@ -401,7 +401,7 @@ intWizFi360Interface::scan(WiFiAccessPoint *res, unsigned count, scan_mode mode,
         return status;
     }
 
-    return _wizfi360.scan(res, count, (mode == SCANMODE_ACTIVE ? WIZFI360::SCANMODE_ACTIVE : WIZFI360::SCANMODE_PASSIVE),
+    return _wizfi360.scan(res, count, (mode == SCANMODE_ACTIVE ? WizFi360::SCANMODE_ACTIVE : WizFi360::SCANMODE_PASSIVE),
                      t_min, t_max);
 }
 
@@ -462,7 +462,7 @@ void WizFi360Interface::_reset()
     if (_rst_pin.is_connected()) {
         _rst_pin.rst_assert();
         // If you happen to use Pin7 CH_EN as reset pin, not needed otherwise
-      
+
         ThisThread::sleep_for(2); // Documentation says 200 us; need 2 ticks to get minimum 1 ms.
         _wizfi360.flush();
         _rst_pin.rst_deassert();
@@ -504,7 +504,7 @@ int WizFi360Interface::socket_open(void **handle, nsapi_protocol_t proto)
         return NSAPI_ERROR_NO_SOCKET;
     }
 
-    struct WIZFI360_socket *socket = new struct WIZFI360_socket;
+    struct WizFi360_socket *socket = new struct WizFi360_socket;
     if (!socket) {
         return NSAPI_ERROR_NO_SOCKET;
     }
@@ -519,7 +519,7 @@ int WizFi360Interface::socket_open(void **handle, nsapi_protocol_t proto)
 
 int WizFi360Interface::socket_close(void *handle)
 {
-    struct WIZFI360_socket *socket = (struct WIZFI360_socket *)handle;
+    struct WizFi360_socket *socket = (struct WizFi360_socket *)handle;
     int err = 0;
 
     if (!socket) {
@@ -543,7 +543,7 @@ int WizFi360Interface::socket_close(void *handle)
 
 int WizFi360Interface::socket_bind(void *handle, const SocketAddress &address)
 {
-    struct WIZFI360_socket *socket = (struct WIZFI360_socket *)handle;
+    struct WizFi360_socket *socket = (struct WizFi360_socket *)handle;
 
     if (!socket) {
         return NSAPI_ERROR_NO_SOCKET;
@@ -575,7 +575,7 @@ int WizFi360Interface::socket_listen(void *handle, int backlog)
 
 int WizFi360Interface::socket_connect(void *handle, const SocketAddress &addr)
 {
-    struct WIZFI360_socket *socket = (struct WIZFI360_socket *)handle;
+    struct WizFi360_socket *socket = (struct WizFi360_socket *)handle;
     nsapi_error_t ret;
 
     if (!socket) {
@@ -601,7 +601,7 @@ int WizFi360Interface::socket_accept(void *server, void **socket, SocketAddress 
 int WizFi360Interface::socket_send(void *handle, const void *data, unsigned size)
 {
     nsapi_error_t status;
-    struct WIZFI360_socket *socket = (struct WIZFI360_socket *)handle;
+    struct WizFi360_socket *socket = (struct WizFi360_socket *)handle;
     uint8_t expect_false = false;
 
     if (!socket) {
@@ -623,7 +623,7 @@ int WizFi360Interface::socket_send(void *handle, const void *data, unsigned size
             && socket->proto == NSAPI_TCP
             && core_util_atomic_cas_u8(&_cbs[socket->id].deferred, &expect_false, true)) {
         tr_debug("Postponing SIGIO from the device");
-        if (!_global_event_queue->call_in(50, callback(this, &WIZFI360Interface::event_deferred))) {
+        if (!_global_event_queue->call_in(50, callback(this, &WizFi360Interface::event_deferred))) {
             MBED_ERROR(MBED_MAKE_ERROR(MBED_MODULE_DRIVER, MBED_ERROR_CODE_ENOMEM), \
                        "socket_send(): unable to add event to queue. Increase \"events.shared-eventsize\"\n");
         }
@@ -637,7 +637,7 @@ int WizFi360Interface::socket_send(void *handle, const void *data, unsigned size
 
 int WizFi360Interface::socket_recv(void *handle, void *data, unsigned size)
 {
-    struct WIZFI360_socket *socket = (struct WIZFI360_socket *)handle;
+    struct WizFi360_socket *socket = (struct WizFi360_socket *)handle;
 
     if (!socket) {
         return NSAPI_ERROR_NO_SOCKET;
@@ -662,7 +662,7 @@ int WizFi360Interface::socket_recv(void *handle, void *data, unsigned size)
 
 int WizFi360Interface::socket_sendto(void *handle, const SocketAddress &addr, const void *data, unsigned size)
 {
-    struct WIZFI360_socket *socket = (struct WIZFI360_socket *)handle;
+    struct WizFi360_socket *socket = (struct WizFi360_socket *)handle;
 
     if (!socket) {
         return NSAPI_ERROR_NO_SOCKET;
@@ -692,7 +692,7 @@ int WizFi360Interface::socket_sendto(void *handle, const SocketAddress &addr, co
 
 int WizFi360Interface::socket_recvfrom(void *handle, SocketAddress *addr, void *data, unsigned size)
 {
-    struct WIZFI360_socket *socket = (struct WIZFI360_socket *)handle;
+    struct WizFi360_socket *socket = (struct WizFi360_socket *)handle;
 
     if (!socket) {
         return NSAPI_ERROR_NO_SOCKET;
@@ -708,7 +708,7 @@ int WizFi360Interface::socket_recvfrom(void *handle, SocketAddress *addr, void *
 
 void WizFi360Interface::socket_attach(void *handle, void (*callback)(void *), void *data)
 {
-    struct WIZFI360_socket *socket = (struct WIZFI360_socket *)handle;
+    struct WizFi360_socket *socket = (struct WizFi360_socket *)handle;
     _cbs[socket->id].callback = callback;
     _cbs[socket->id].data = data;
 }
@@ -716,7 +716,7 @@ void WizFi360Interface::socket_attach(void *handle, void (*callback)(void *), vo
 nsapi_error_t WizFi360Interface::setsockopt(nsapi_socket_t handle, int level,
                                            int optname, const void *optval, unsigned optlen)
 {
-    struct WIZFI360_socket *socket = (struct WIZFI360_socket *)handle;
+    struct WizFi360_socket *socket = (struct WizFi360_socket *)handle;
 
     if (!optlen) {
         return NSAPI_ERROR_PARAMETER;
@@ -748,7 +748,7 @@ nsapi_error_t WizFi360Interface::setsockopt(nsapi_socket_t handle, int level,
 
 nsapi_error_t WizFi360Interface::getsockopt(nsapi_socket_t handle, int level, int optname, void *optval, unsigned *optlen)
 {
-    struct WIZFI360_socket *socket = (struct WIZFI360_socket *)handle;
+    struct WizFi360_socket *socket = (struct WizFi360_socket *)handle;
 
     if (!optval || !optlen) {
         return NSAPI_ERROR_PARAMETER;
@@ -776,10 +776,10 @@ void WizFi360Interface::event()
 {
     if (!_oob_event_id) {
         // Throttles event creation by using arbitrary small delay
-        _oob_event_id = _global_event_queue->call_in(50, callback(this, &WIZFI360Interface::proc_oob_evnt));
+        _oob_event_id = _global_event_queue->call_in(50, callback(this, &WizFi360Interface::proc_oob_evnt));
         if (!_oob_event_id) {
             MBED_ERROR(MBED_MAKE_ERROR(MBED_MODULE_DRIVER, MBED_ERROR_CODE_ENOMEM), \
-                       "WIZFI360Interface::event(): unable to add event to queue. Increase \"events.shared-eventsize\"\n");
+                       "WizFi360Interface::event(): unable to add event to queue. Increase \"events.shared-eventsize\"\n");
         }
     }
     for (int i = 0; i < WIZFI360_SOCKET_COUNT; i++) {
@@ -809,11 +809,11 @@ WiFiInterface *WiFiInterface::get_default_instance()
 
 #endif
 
-void WizFi360Interface::update_conn_state_cb()
+void WizFi360Interface::refresh_conn_state_cb()
 {
     nsapi_connection_status_t prev_stat = _conn_stat;
     _conn_stat = _wizfi360.connection_status();
-    }
+
 
     switch (_conn_stat) {
         // Doesn't require changes
