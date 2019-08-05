@@ -51,6 +51,7 @@
 #define TRACE_GROUP  "WIZFI" // WizFi360 Interface
 
 using namespace mbed;
+using namespace rtos;
 
 #if defined MBED_CONF_WIZFI360_TX && defined MBED_CONF_WIZFI360_RX
 WizFi360Interface::WizFi360Interface()
@@ -84,7 +85,6 @@ WizFi360Interface::WizFi360Interface()
         _sock_i[i].sport = 0;
     }
 
-    _oob2global_event_queue();
 }
 #endif
 
@@ -457,7 +457,7 @@ nsapi_error_t WizFi360Interface::_init(void)
     return NSAPI_ERROR_OK;
 }
 
-void WizFi360Interface::_reset()
+nsapi_error_t WizFi360Interface::_reset()
 {
     if (_rst_pin.is_connected()) {
         _rst_pin.rst_assert();
@@ -788,7 +788,15 @@ void WizFi360Interface::event()
         }
     }
 }
-
+void WizFi360Interface::event_deferred()
+{
+    for (int i = 0; i < WIZFI360_SOCKET_COUNT; i++) {
+        uint8_t expect_true = true;
+        if (core_util_atomic_cas_u8(&_cbs[i].deferred, &expect_true, false) && _cbs[i].callback) {
+            _cbs[i].callback(_cbs[i].data);
+        }
+    }
+}
 void WizFi360Interface::attach(Callback<void(nsapi_event_t, intptr_t)> status_cb)
 {
     _conn_stat_cb = status_cb;
