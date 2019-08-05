@@ -200,10 +200,10 @@ void WizFi360Interface::_connect_async()
     } else {
         // Postpone to give other stuff time to run
         _connect_event_id = _global_event_queue->call_in(WIZFI360_INTERFACE_CONNECT_INTERVAL_MS,
-                                                         callback(this, &WIZFI360Interface::_connect_async));
+                                                         callback(this, &WizFi360Interface::_connect_async));
         if (!_connect_event_id) {
             MBED_ERROR(MBED_MAKE_ERROR(MBED_MODULE_DRIVER, MBED_ERROR_CODE_ENOMEM), \
-                       "WIZFI360Interface::_connect_async(): unable to add event to queue. Increase \"events.shared-eventsize\"\n");
+                       "WizFi360Interface::_connect_async(): unable to add event to queue. Increase \"events.shared-eventsize\"\n");
         }
     }
     _cmutex.unlock();
@@ -387,7 +387,7 @@ int WizFi360Interface::scan(WiFiAccessPoint *res, unsigned count)
     return scan(res, count, SCANMODE_ACTIVE, 0, 0);
 }
 
-int WIZFI360Interface::scan(WiFiAccessPoint *res, unsigned count, scan_mode mode, unsigned t_max, unsigned t_min)
+intWizFi360Interface::scan(WiFiAccessPoint *res, unsigned count, scan_mode mode, unsigned t_max, unsigned t_min)
 {
     if (t_max > WIZFI360_SCAN_TIME_MAX) {
         return NSAPI_ERROR_PARAMETER;
@@ -479,7 +479,7 @@ void WizFi360Interface::_reset()
     return _wizfi360.at_available() ? NSAPI_ERROR_OK : NSAPI_ERROR_DEVICE_ERROR;
 }
 
-struct WIZFI360_socket {
+struct WizFi360_socket {
     int id;
     nsapi_protocol_t proto;
     bool connected;
@@ -877,7 +877,7 @@ nsapi_error_t WizFi360Interface::set_blocking(bool blocking)
     return NSAPI_ERROR_OK;
 }
 
-nsapi_error_t WIZFI360Interface::set_country_code(bool track_ap, const char *country_code, int len, int channel_start, int channels)
+nsapi_error_t WizFi360Interface::set_country_code(bool track_ap, const char *country_code, int len, int channel_start, int channels)
 {
     for (int i = 0; i < len; i++) {
         // Validation done by firmware
